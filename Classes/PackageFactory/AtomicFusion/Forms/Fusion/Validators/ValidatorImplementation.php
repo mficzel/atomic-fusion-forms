@@ -21,8 +21,19 @@ use PackageFactory\AtomicFusion\Forms\Domain\Model\Definition\ValidatorDefinitio
 /**
  * Fusion object to create validator definitions
  */
-class ValidatorImplementation extends AbstractFusionObject
+class ValidatorImplementation extends AbstractFusionObject implements ValidatorDefinitionInterface
 {
+
+    /**
+     * @var ValidatorDefinitionInterface
+     */
+    protected $resolvedValidatorDefinition;
+
+    /**
+     * @var array
+     */
+    protected $initialFusionContext;
+
     /**
      * Check if `implementationClassName` and `option` values are in order and return
      * a new ValidatorDefinition based on these
@@ -39,10 +50,43 @@ class ValidatorImplementation extends AbstractFusionObject
             );
         }
 
+        $this->initialFusionContext = $this->runtime->getCurrentContext() ?: [];
+
+        return $this;
+    }
+
+    /**
+     * @return ValidatorDefinitionInterface
+     * @throws EvaluationException
+     */
+    public function resolveValidatorDefinition()
+    {
+        if ($this->resolvedValidatorDefinition) {
+            return $this->resolvedValidatorDefinition;
+        }
+
+        /*
+         * The form property is taken from the latest context and combined
+         * with the context during the initial evaluation.
+         *
+         * @todo use the form propertyName that is defined in fusion instead of 'form'
+         */
+        $combinedFusionContext = $this->initialFusionContext;
+        $context = $this->runtime->getCurrentContext();
+        $formContextName = 'form';
+
+        if (array_key_exists($formContextName, $context)) {
+            $combinedFusionContext[$formContextName] = $context[$formContextName];
+        }
+
+        $this->runtime->pushContextArray($combinedFusionContext);
+
         $name = $this->tsValue('name');
         $implementationClassName = $this->tsValue('implementationClassName');
         $options = $this->tsValue('options');
         $customErrorMessage = $this->tsValue('message');
+
+        $this->runtime->popContext();
 
         if (!$implementationClassName) {
             throw new EvaluationException(
@@ -76,9 +120,36 @@ class ValidatorImplementation extends AbstractFusionObject
             );
         }
 
-        $validatorDefinition = new ValidatorDefinition($name, $implementationClassName, $options);
-        $validatorDefinition->setCustomErrorMessage($customErrorMessage);
+        $this->resolvedValidatorDefinition = new ValidatorDefinition($name, $implementationClassName, $options);
+        $this->resolvedValidatorDefinition->setCustomErrorMessage($customErrorMessage);
 
-        return $validatorDefinition;
+        return $this->resolvedValidatorDefinition;
     }
+
+    public function getName()
+    {
+        return $this->resolveValidatorDefinition()->getName();
+    }
+
+    public function getImplementationClassName()
+    {
+        return $this->resolveValidatorDefinition()->getImplementationClassName();
+    }
+
+    public function getOptions()
+    {
+        return $this->resolveValidatorDefinition()->getOptions();
+    }
+
+    public function getCustomErrorMessage()
+    {
+        return $this->resolveValidatorDefinition()->getCustomErrorMessage();
+    }
+
+    public function hasCustomErrorMessage()
+    {
+        return $this->resolveValidatorDefinition()->hasCustomErrorMessage();
+    }
+
+
 }
